@@ -1,4 +1,4 @@
-# OptiSigns OptiBot Mini-Clone
+# Documentation Ingestion & Vector Store Pipeline
 
 A production-ready implementation of an automated support documentation pipeline that scrapes OptiSigns Help Center articles, converts them to Markdown, and maintains an OpenAI Vector Store for AI-powered assistance.
 
