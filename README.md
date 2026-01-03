@@ -153,6 +153,14 @@ jobs:
 
 **Note:** For persistent state across runs, configure a volume mount for `/app/state.json` and `/app/vector_store_id.txt`.
 
+### Daily Job Deployment
+
+The scraper and uploader are packaged as a Docker container designed to run as a scheduled daily job on DigitalOcean App Platform.
+
+The container runs once and exits cleanly, making it suitable for scheduled execution.
+
+Due to account and billing constraints, the job was validated locally using Docker. The same container can be deployed to DigitalOcean App Platform without modification.
+
 Detailed deployment instructions: [DEPLOYMENT.md](./scraper/DEPLOYMENT.md)
 
 ## Project Structure
