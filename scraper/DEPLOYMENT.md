@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document explains how to deploy the OptiSigns OptiBot scraper as a daily scheduled job.
+This document provides optional deployment instructions for running the OptiSigns OptiBot scraper as a scheduled daily job. The implementation is deployment-ready but was validated locally due to account constraints.
 
 ## Components
 
@@ -104,7 +104,7 @@ Articles skipped:   0
 ### Build the Image
 
 ```bash
-cd sraper
+cd scraper
 docker build -t optisigns-optibot:latest .
 ```
 
@@ -116,115 +116,51 @@ docker run --rm \
   optisigns-optibot:latest
 ```
 
-### With Persistent State (Recommended)
+The container runs `main.py` by default and exits cleanly after completion.
 
-To persist state between runs, mount a volume:
+## DigitalOcean App Platform (Optional)
 
-```bash
-docker run --rm \
-  -e OPENAI_API_KEY='your-api-key-here' \
-  -v $(pwd)/state:/app/state \
-  optisigns-optibot:latest
-```
+The application can be deployed as a scheduled job on DigitalOcean App Platform.
 
-Update `main.py` to use `/app/state/state.json` for state persistence.
+### Configuration Steps
 
-## DigitalOcean App Platform Deployment
+1. **Create a Job Component** (not a Web Service):
+   - Component Type: Job
+   - Build via Dockerfile
+   - Set environment variable `OPENAI_API_KEY`
 
-### Configuration
+2. **Configure Schedule**:
+   - Cron expression: `0 2 * * *` (daily at 2 AM UTC)
+   - Recommended instance: `basic-xxs`
 
-1. **Create a Worker Component** (not Web Service):
-   - Type: Worker
-   - Build Command: `docker build -t optisigns-optibot .`
-   - Run Command: `python main.py`
+3. **State Persistence**:
+   - For production use, configure persistent storage for `state.json` and `vector_store_id.txt`
+   - Without persistence, each run treats all articles as new
 
-2. **Set Environment Variables**:
-   ```
-   OPENAI_API_KEY=your-api-key-here
-   ```
-
-3. **Configure Scheduled Job**:
-   - Schedule: `0 2 * * *` (daily at 2 AM UTC)
-   - Timeout: 30 minutes
-   - Instance Count: 1
-
-### App Spec YAML Example
+### Example Configuration
 
 ```yaml
-name: optisigns-optibot
-region: nyc
-
 jobs:
   - name: daily-scraper
-    dockerfile_path: sraper/Dockerfile
-    instance_count: 1
+    dockerfile_path: scraper/Dockerfile
     instance_size_slug: basic-xxs
-    kind: POST_DEPLOY
-    schedule:
-      cron_spec: "0 2 * * *"  # Daily at 2 AM UTC
     envs:
       - key: OPENAI_API_KEY
         scope: RUN_TIME
         type: SECRET
-        value: your-api-key-here
 ```
 
-### Alternative: GitHub Actions
-
-If you prefer CI/CD over App Platform:
-
-```yaml
-# .github/workflows/daily-scrape.yml
-name: Daily Scraper
-
-on:
-  schedule:
-    - cron: '0 2 * * *'  # Daily at 2 AM UTC
-  workflow_dispatch:  # Manual trigger
-
-jobs:
-  scrape:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-      
-      - name: Install dependencies
-        run: |
-          cd sraper
-          pip install -r requirements.txt
-      
-      - name: Run daily job
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          cd sraper
-          python main.py
-      
-      - name: Commit state
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add sraper/state.json sraper/vector_store_id.txt
-          git diff --quiet && git diff --staged --quiet || git commit -m "Update scraper state [skip ci]"
-          git push
-```
+**Note:** The exact YAML structure may vary based on DigitalOcean's current App Spec format. Refer to their documentation for the latest syntax.
 
 ## Monitoring and Logs
 
-### Check Exit Code
+### Exit Codes
 
 The job exits with:
 - `0`: Success
 - `1`: Error occurred
 
-### Log Analysis
-
-Look for these key indicators:
+### Log Indicators
 
 **Success:**
 ```
@@ -235,14 +171,6 @@ Look for these key indicators:
 ```
 ❌ Job failed with error: ...
 ```
-
-### Metrics to Track
-
-- Articles added per run
-- Articles updated per run
-- Articles skipped per run
-- Job execution time
-- Error rate
 
 ## Troubleshooting
 
@@ -268,50 +196,21 @@ rm state.json
 # Next run will treat all articles as new
 ```
 
-### Issue: Vector Store quota exceeded
+## Implementation Notes
 
-**Solution:** OpenAI has limits on Vector Store size:
-1. Check your OpenAI plan limits
-2. Consider archiving old articles
-3. Implement cleanup for outdated content
+- **Validation**: Job tested locally using Docker
+- **Exit Behavior**: Container exits cleanly after completion
+- **State Files**: Contain only filenames and SHA-256 hashes (no article content)
+- **API Keys**: Loaded from environment variables only
+- **Execution Time**: Typically completes in < 5 minutes
 
-## Best Practices
+## Next Steps (Optional)
 
-1. **Monitoring**: Set up alerts for job failures
-2. **Backup**: Regularly backup `state.json` and `vector_store_id.txt`
-3. **Logging**: Consider shipping logs to a centralized system
-4. **Rate Limits**: The scraper includes delays to respect API limits
-5. **State Persistence**: Always use persistent storage for state files
+If deploying to production:
 
-## Production Checklist
+1. Set up DigitalOcean App Platform job component
+2. Configure environment variables securely
+3. Enable persistent storage for state files
+4. Set up monitoring and error notifications
+5. Test manually before enabling schedule
 
-- [ ] Environment variables configured securely
-- [ ] State persistence enabled (volume mount or persistent storage)
-- [ ] Monitoring and alerting configured
-- [ ] Log aggregation set up
-- [ ] Backup strategy for state files
-- [ ] Schedule configured (daily at off-peak hours)
-- [ ] Error notifications configured
-- [ ] Resource limits appropriate for workload
-
-## Cost Optimization
-
-- Use DigitalOcean's smallest instance (`basic-xxs`) - sufficient for this workload
-- Job typically completes in < 5 minutes
-- Delta uploads minimize OpenAI API costs
-- Consider running during off-peak hours
-
-## Security Notes
-
-- API keys are loaded from environment variables (never hardcoded)
-- Container runs as non-root user
-- No sensitive data persisted in logs
-- State files contain only filenames and hashes (no content)
-
-## Next Steps
-
-1. Deploy to DigitalOcean App Platform or GitHub Actions
-2. Configure secrets in deployment platform
-3. Set up monitoring and alerts
-4. Run first job manually to verify setup
-5. Monitor initial runs to tune schedule if needed
